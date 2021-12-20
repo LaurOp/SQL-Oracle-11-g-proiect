@@ -1,0 +1,184 @@
+--EXERCITIUL (11)
+
+-- Sa se afiseze pentru fiecare magazin codul, numele si numarul de produse
+--(atat bunuri cat si servicii) pe care le vinde. Sa se ordoneze descrescator dupa
+--numarul de produse.
+SELECT mag.*,(SELECT COUNT(*)
+        FROM MAGAZIN m JOIN VANZARE v ON(m.id_magazin = v.id_magazin)
+                JOIN DISTRIBUITOR d ON(v.id_distribuitor = d.id_distribuitor)
+                JOIN OFERTA o ON(d.id_distribuitor = o.id_distribuitor)
+                JOIN PRODUS p ON(o.cod_produs = p.cod_produs)
+        WHERE m.id_magazin = mag.id_magazin) AS "Numar produse"
+FROM MAGAZIN mag
+ORDER BY "Numar produse" desc
+
+
+
+--Selectati toate firmele IT implicate(atat sa hosteze serverul paginii
+--cat si sa le puna la dispozitie programatori) in realizarea paginilor web prin
+--intermediul carora isi vinde produsele magazinul 'Cel.ro'. Folositi clauza WITH.
+
+WITH pagini as (SELECT v.link_pagina aux
+                FROM VANZARE v
+                WHERE v.id_magazin = ( SELECT mag.id_magazin
+                                        FROM MAGAZIN mag
+                                        WHERE mag.nume = 'Cel.ro'))
+
+SELECT *
+FROM FIRMA_IT
+WHERE id_firma in (SELECT id_firma
+                    FROM SERVER
+                    WHERE id_server in (SELECT id_server
+                                        FROM PAGINA_WEB
+                                        WHERE link_pagina in (SELECT aux
+                                                                FROM pagini)))
+    OR id_firma in(SELECT id_firma
+                    FROM PROGRAMATOR
+                    WHERE cod_programator in (SELECT cod_programator
+                                                FROM PROGRAM_
+                                                WHERE link_pagina in (SELECT aux
+                                                                        FROM pagini)
+                    ))
+
+
+
+
+
+--Afisati numele, magazinul la care lucreaza, data angajarii si vechimea(in zile) in firma
+--si ziua saptamanii (in limba romana) in care au fost angajati a 
+--tuturor angajatilor ce au inceput serviciul (au fost angajati) intr-o zi de miercuri si
+--lucreaza intr-un magazin ce-si face reclama prin cel putin o reclama pe youtube sau care au
+--fost angajati intr-o zi de vineri si lucreaza intr-un magazin ce-si face reclama prin
+--cel putin o reclama pe siteul www.reclama.
+
+
+
+SELECT nume,(SELECT nume
+            FROM MAGAZIN mag
+            WHERE mag.id_magazin = a.id_magazin)as magazin, data_angajare, ROUND(SYSDATE - a.data_angajare ), DECODE(TO_CHAR(a.data_angajare,'DY'), 'WED','Miercuri','FRI','Vineri')
+FROM ANGAJAT a
+WHERE ( NVL(TO_CHAR(a.data_angajare,'DY'),'A')='WED'
+    AND a.id_magazin in (SELECT id_magazin
+                        FROM MAGAZIN
+                        WHERE id_magazin in (SELECT id_magazin
+                                            FROM PROMOVARE
+                                            WHERE url_reclama in (SELECT url_reclama
+                                                                FROM RECLAMA rec
+                                                                WHERE INSTR(LOWER(rec.url_reclama),'yt/') != 0)
+                                                                )
+                                                                ))
+    OR
+    (NVL(TO_CHAR(a.data_angajare,'DY'),'A')='FRI'
+    AND a.id_magazin in (SELECT id_magazin
+                        FROM MAGAZIN
+                        WHERE id_magazin in (SELECT id_magazin
+                                            FROM PROMOVARE
+                                            WHERE url_reclama in (SELECT url_reclama
+                                                                FROM RECLAMA rec2
+                                                                WHERE INSTR(LOWER(rec2.url_reclama),'www.reclama') != 0)
+                                                                )
+                                                                ))
+                                                                
+                                                                
+
+
+--Grupati programatorii dupa criteriul 'Cunosc limbajul cpp?'. Se vor afisa doar valori mai mari decat 3
+
+SELECT COUNT(*)as numar,cpp
+FROM(
+    SELECT
+    CASE
+        WHEN INSTR(limbaje_cunoscute,'cpp') = 0 THEN 'nu cunosc cpp'
+        WHEN INSTR(limbaje_cunoscute,'cpp')!= 0 THEN 'cunosc cpp'
+    END as cpp
+    FROM PROGRAMATOR)
+GROUP BY cpp
+HAVING COUNT(*)>3
+
+
+--Selectati toti curierii care livreaza produse distribuite de distribuitori infiintati inainte de 30 iunie 1990
+
+SELECT a.cod_angajat,a.nume,a.id_magazin
+FROM ANGAJAT a
+WHERE a.cod_angajat IN (SELECT p.cod_curier
+                        FROM PRODUS p
+                        WHERE p.cod_produs IN (SELECT o.cod_produs
+                                                FROM OFERTA o
+                                                WHERE o.id_distribuitor IN (SELECT d.id_distribuitor
+                                                                            FROM DISTRIBUITOR d
+                                                                            WHERE d.id_distribuitor = o.id_distribuitor
+                                                                                AND d.data_infiintare < TO_DATE('30-06-1990','DD-MM-YYYY'))
+                        ))
+
+
+
+
+
+
+
+
+--Exercitiul (12)
+commit;
+
+--Sa se stearga toate parteneriatele dintre un producator infiintat inainte de anul 2005
+--si o fabrica ce are prima litera din adresa 'B'
+
+
+DELETE
+FROM PARTENERIAT par
+WHERE par.id_producator = ANY(
+            SELECT id_producator
+            FROM PRODUCATOR p
+            WHERE p.data_infiintare < TO_DATE('01-01-2005','DD-MM-YYYY'))
+        AND
+        par.cod_fabrica = ANY(
+            SELECT cod_fabrica
+            FROM FABRICA
+            WHERE adresa LIKE 'B%'
+        )
+
+rollback;
+
+
+--Crestezi in entitatea CLIENT coloana 'platit' cu 10% pentru toti clientii care
+--au fost ajutati de call-centeri de la magazinul eMag
+
+UPDATE CLIENT_
+SET platit= 1.1*platit
+WHERE cod_angajat = ANY(
+    SELECT cod_angajat
+    FROM ANGAJAT a
+    WHERE a.id_magazin = (SELECT id_magazin
+                            FROM MAGAZIN mag
+                            WHERE mag.nume='eMag'))
+                            
+    
+rollback;
+
+
+
+--Sa se seteze coloana 'suma' din entitatea ACHIZITIE cu valoarea client.platit * numarul de 
+--produse comandate de client
+
+
+UPDATE ACHIZITIE a
+SET a.suma = (SELECT c.platit
+                FROM CLIENT_ c
+                WHERE a.id_client = c.id_client)*(SELECT COUNT(a.id_client)
+                                            FROM ACHIZITIE ac
+                                            )
+WHERE suma is null
+            
+rollback;
+
+
+
+
+
+--Exercitiul (13)
+
+--CREATE SEQUENCE SEQ1 START WITH 1 INCREMENT BY 1;
+--CREATE SEQUENCE SEQ2 START WITH 1 INCREMENT BY 1;
+--CREATE SEQUENCE SEQ3 START WITH 1 INCREMENT BY 1 NOCACHE NOCYCLE;
+--CREATE SEQUENCE SEQ_ANGAJAT INCREMENT BY 1 START WITH 1 NOCACHE NOCYCLE;
+--CREATE SEQUENCE SEQ_PRODUS START WITH 1 INCREMENT BY 1;
